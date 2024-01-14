@@ -14,6 +14,7 @@ import (
 type ShortUrl struct {
 	Base  string
 	Short string
+	Hits  uint
 }
 
 type Store struct {
@@ -60,7 +61,7 @@ func (s *Store) Close() error {
 	return s.client.Disconnect(ctx)
 }
 
-func (s *Store) Get(shortUrl string) (*ShortUrl, error) {
+func (s *Store) Get(shortUrl string) (ShortUrl, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -68,13 +69,13 @@ func (s *Store) Get(shortUrl string) (*ShortUrl, error) {
 	result := &ShortUrl{}
 	if err := s.collection.FindOne(ctx, filter).Decode(result); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, ErrNotFound // Convert error to abstract from MongoDb
+			return ShortUrl{}, ErrNotFound // Convert error to abstract from MongoDb
 		} else {
 			log.Printf("failed to get short url entry, err: %v", err)
 		}
-		return nil, err
+		return ShortUrl{}, err
 	}
-	return result, nil
+	return *result, nil
 }
 
 // Allow multiple entries pointing to the same base url for ownership and stats concerns
@@ -88,6 +89,24 @@ func (s *Store) Create(shortUrl ShortUrl) error {
 	}
 	if _, err := s.collection.InsertOne(ctx, newValue); err != nil {
 		log.Printf("failed to create short url entry, err: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (s *Store) UpdateHits(shortUrl string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	newValue := bson.M{
+		"$inc": bson.M{
+			"hits": 1,
+		},
+	}
+	filter := bson.M{"short": shortUrl}
+	if _, err := s.collection.UpdateOne(ctx, filter, newValue); err != nil {
+		log.Printf("failed to update short url entry, err: %v", err)
 		return err
 	}
 

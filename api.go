@@ -49,7 +49,9 @@ func (a *Api) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	result := struct{ shortUrl string }{shortUrl.Short}
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, result)
 }
 
 func (a *Api) delete(w http.ResponseWriter, r *http.Request) {
@@ -78,9 +80,28 @@ func (a *Api) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Register hit
+	_ = a.store.UpdateHits(shortUrl.Short) // Discard update error, it's already logged in store and serves no purpose in the response
+
 	result := struct{ Url string }{shortUrl.Base}
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, result)
+}
+
+func (a *Api) getStats(w http.ResponseWriter, r *http.Request) {
+	url := chi.URLParam(r, "url")
+	shortUrl, err := a.store.Get(url)
+	if err != nil {
+		if err == store.ErrNotFound {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, shortUrl)
 }
 
 // Generate a new short url that isn't already in use
