@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,12 @@ import (
 )
 
 func main() {
+	// Get configuration
+	portStr := os.Getenv("PORT")
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.Fatalf("failed to convert SHORT_URL_LENGTH to int: %v", err)
+	}
 	dbUrl := os.Getenv("DB_URL")
 	dbName := os.Getenv("DB_NAME")
 	collectionName := os.Getenv("COLLECTION_NAME")
@@ -21,6 +28,7 @@ func main() {
 		log.Fatalf("failed to convert SHORT_URL_LENGTH to int: %v", err)
 	}
 
+	// Build store
 	store, err := store.NewStore(dbUrl, dbName, collectionName)
 	if err != nil {
 		log.Fatalf("error creating store: %v", err)
@@ -30,10 +38,10 @@ func main() {
 			log.Printf("error closing store: %v", err)
 		}
 	}()
-	api := NewApi(store, []byte("abcdefghijklmnopqrstuvwxyz0123456789"), shortUrlLength)
 
-	err = start(1234, api)
-	if err != nil {
+	// Build and start api
+	api := NewApi(store, []byte("abcdefghijklmnopqrstuvwxyz0123456789"), shortUrlLength)
+	if err := start(port, api); err != nil {
 		log.Fatalf("error starting server: %v", err)
 	}
 }
@@ -48,8 +56,9 @@ func start(port int, api *Api) error {
 	r.Post("/", api.create)
 	r.Delete("/{url}", api.delete)
 	r.Get("/{url}", api.get)
+	r.Get("/{url}/stats", api.getStats)
 
 	// Start server
-	log.Print("server started on :3000")
-	return http.ListenAndServe(":3000", r)
+	log.Printf("server started on :%d", port)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 }
